@@ -74,60 +74,72 @@ app.post('/webhook', async (req, res) => {
   }
 
   const events = req.body.events || [];
+
   for (const ev of events) {
     try {
       const id = uuidv4();
 
-      // Determine project ID
-      // Prefer ev.resource.gid if it's a task/subtask or fallback to parent
+      let task_id = null;
+      let subtask_id = null;
       let project_id = null;
-      if (ev.resource?.resource_type === 'task' || ev.resource?.resource_type === 'subtask') {
-        project_id = ev.resource.gid;
-      } else if (ev.parent?.gid) {
-        project_id = ev.parent.gid;
-      }
-
-      const task_id = ev.parent?.gid || (ev.resource?.resource_type === 'task' ? ev.resource.gid : null);
-      const subtask_id = ev.resource?.resource_type === 'subtask' ? ev.resource.gid : null;
-      const action_type = ev.action || 'unknown';
-      const actor_name = ev.user?.name || ev.created_by?.name || 'someone';
-      let task_name = ev.resource?.name || null;
+      let task_name = null;
       let subtask_name = null;
       let comment_text = null;
       let added_user_name = null;
       let removed_user_name = null;
+      const action_type = ev.action || 'unknown';
+      const actor_name = ev.user?.name || ev.created_by?.name || 'someone';
+      const created_at = ev.created_at || new Date().toISOString();
 
-      // Handle story objects
-      if (ev.resource?.resource_type === 'story') {
-        comment_text = ev.resource.text || null;
+      // Determine task/subtask ID
+      if (ev.resource?.resource_type === 'task') {
+        task_id = ev.resource.gid;
+      } else if (ev.resource?.resource_type === 'subtask') {
+        subtask_id = ev.resource.gid;
+        task_id = ev.parent?.gid || null;
+      } else if (ev.resource?.resource_type === 'story') {
+        task_id = ev.parent?.gid || null;
 
-        // For stories, task name comes from parent task
-        if (ev.parent?.gid) {
+        // Fetch comment text for comment_added stories
+        if (ev.resource.resource_subtype === 'comment_added') {
           try {
-            const taskResp = await fetch(`https://app.asana.com/api/1.0/tasks/${ev.parent.gid}`, {
+            const storyResp = await fetch(`https://app.asana.com/api/1.0/stories/${ev.resource.gid}`, {
               headers: { Authorization: `Bearer ${process.env.ASANA_PERSONAL_ACCESS_TOKEN}` }
             });
-            const taskData = await taskResp.json();
-            task_name = taskData.data?.name || null;
+            const storyData = await storyResp.json();
+            comment_text = storyData.data?.text || null;
           } catch (err) {
-            console.error('Failed to fetch task name for story', err);
+            console.error('Failed to fetch story text', err);
           }
         }
       }
 
-      // Handle added/removed users (assignee/collaborator)
+      // Fetch task to get project_id and task_name
+      if (task_id) {
+        try {
+          const taskResp = await fetch(`https://app.asana.com/api/1.0/tasks/${task_id}`, {
+            headers: { Authorization: `Bearer ${process.env.ASANA_PERSONAL_ACCESS_TOKEN}` }
+          });
+          const taskData = await taskResp.json();
+          project_id = taskData.data?.projects?.[0]?.gid || null;
+          task_name = taskData.data?.name || null;
+        } catch (err) {
+          console.error('Failed to fetch task details', err);
+        }
+      }
+
+      // Handle added/removed users (assignee or collaborator)
       if (ev.added?.name) added_user_name = ev.added.name;
       if (ev.removed?.name) removed_user_name = ev.removed.name;
 
-      const created_at = ev.created_at || new Date().toISOString();
-
-      // Persist the event
+      // Persist event
       await pool.query(
-        `INSERT INTO events 
+        `INSERT INTO events
         (id, project_id, task_id, subtask_id, action_type, actor_name, task_name, subtask_name, comment_text, added_user_name, removed_user_name, created_at, raw_json)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
         [id, project_id, task_id, subtask_id, action_type, actor_name, task_name, subtask_name, comment_text, added_user_name, removed_user_name, created_at, ev]
       );
+
     } catch (err) {
       console.error('Failed to persist event', err);
     }
@@ -135,6 +147,7 @@ app.post('/webhook', async (req, res) => {
 
   res.status(200).send('OK');
 });
+
 
 // API
 app.get('/api/events', async (req, res) => {
