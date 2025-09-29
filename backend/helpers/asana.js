@@ -1,10 +1,8 @@
-import fetch from "node-fetch";
+const fetch = require("node-fetch");
 
 const ASANA_TOKEN = process.env.ASANA_PAT;
 
-// --- Fetch helpers --------------------------------------------
-
-export async function getUserName(gid) {
+async function getUserName(gid) {
   if (!gid) return "Unknown";
   try {
     const res = await fetch(`https://app.asana.com/api/1.0/users/${gid}`, {
@@ -17,7 +15,7 @@ export async function getUserName(gid) {
   }
 }
 
-export async function getTaskName(gid) {
+async function getTaskName(gid) {
   if (!gid) return null;
   try {
     const res = await fetch(`https://app.asana.com/api/1.0/tasks/${gid}`, {
@@ -30,7 +28,7 @@ export async function getTaskName(gid) {
   }
 }
 
-export async function getCommentText(storyGid) {
+async function getCommentText(storyGid) {
   if (!storyGid) return null;
   try {
     const res = await fetch(
@@ -46,7 +44,7 @@ export async function getCommentText(storyGid) {
 
 // --- Event parsing --------------------------------------------
 
-export function parseAction(ev) {
+function parseAction(ev) {
   let action_type = ev.action || "unknown";
   let details = {};
 
@@ -88,3 +86,10 @@ export function parseAction(ev) {
 
   return { action_type, details };
 }
+
+module.exports = {
+  getUserName,
+  getTaskName,
+  getCommentText,
+  parseAction,
+};
