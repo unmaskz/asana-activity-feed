@@ -65,11 +65,11 @@ app.get('/oauth/callback', async (req, res) => {
 });
 
 // Webhook
-app.post('/webhook', async (req, res) => {
-  const hookSecret = req.header('X-Hook-Secret');
+app.post("/webhook", async (req, res) => {
+  const hookSecret = req.header("X-Hook-Secret");
   if (hookSecret) {
-    res.set('X-Hook-Secret', hookSecret);
-    return res.status(200).send('Handshake');
+    res.set("X-Hook-Secret", hookSecret);
+    return res.status(200).send("Handshake");
   }
 
   const events = req.body.events || [];
@@ -77,19 +77,38 @@ app.post('/webhook', async (req, res) => {
     try {
       const id = uuidv4();
       const project_id = ev.resource?.gid || null;
-      const task_id = ev.parent ? ev.parent.gid : (ev.resource?.resource_type === 'task' ? ev.resource.gid : null);
-      const action_type = ev.action || 'unknown';
-      const actor_name = ev.user?.name || ev.created_by?.name || 'someone';
+      const task_id = ev.parent?.gid || (ev.resource?.resource_type === "task" ? ev.resource.gid : null);
+      const subtask_id = ev.resource?.resource_type === "subtask" ? ev.resource.gid : null;
+      const action_type = ev.action || "unknown";
+      const actor_name = ev.user?.name || ev.created_by?.name || "someone";
+      const task_name = ev.resource?.name || null;
+      const subtask_name = ev.parent?.name || null;
+
+      // Capture comment text
+      const comment_text = ev.comment?.text || ev.text || null;
+
+      // Track added or removed users (assignee or collaborators)
+      let added_user_name = null;
+      let removed_user_name = null;
+      if (ev.added) added_user_name = ev.added.name || null;
+      if (ev.removed) removed_user_name = ev.removed.name || null;
+
+      const created_at = ev.created_at || new Date().toISOString();
+
       await pool.query(
-        'INSERT INTO events (id, project_id, task_id, action_type, actor_name, raw_json) VALUES ($1,$2,$3,$4,$5,$6)',
-        [id, project_id, task_id, action_type, actor_name, ev]
+        `INSERT INTO events 
+        (id, project_id, task_id, subtask_id, action_type, actor_name, task_name, subtask_name, comment_text, added_user_name, removed_user_name, created_at, raw_json)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [id, project_id, task_id, subtask_id, action_type, actor_name, task_name, subtask_name, comment_text, added_user_name, removed_user_name, created_at, ev]
       );
     } catch (err) {
-      console.error('Failed to persist event', err);
+      console.error("Failed to persist event", err);
     }
   }
-  res.status(200).send('OK');
+
+  res.status(200).send("OK");
 });
+
 
 // API
 app.get('/api/events', async (req, res) => {
