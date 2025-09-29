@@ -1,97 +1,90 @@
-const fetch = require('node-fetch');
-const { pool } = require('../db');
+import fetch from "node-fetch";
 
-async function getAccessToken() {
-  // Try to use the most recent OAuth token in DB
-  const { rows } = await pool.query(
-    'SELECT access_token FROM users ORDER BY created_at DESC LIMIT 1'
-  );
-  return rows[0]?.access_token || process.env.ASANA_PERSONAL_ACCESS_TOKEN;
-}
+const ASANA_TOKEN = process.env.ASANA_PAT;
 
-async function resolveUserName(userGid) {
-  const token = await getAccessToken();
+// --- Fetch helpers --------------------------------------------
+
+export async function getUserName(gid) {
+  if (!gid) return "Unknown";
   try {
-    const resp = await fetch(
-      `https://app.asana.com/api/1.0/users/${userGid}?opt_fields=name`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!resp.ok) {
-      const errText = await resp.text();
-      console.error(`❌ resolveUserName failed for ${userGid}: ${resp.status} ${errText}`);
-      return `user-${userGid}`;
-    }
-    const data = await resp.json();
-    return data?.data?.name || `user-${userGid}`;
-  } catch (err) {
-    console.error(`❌ Error resolving user ${userGid}`, err);
-    return `user-${userGid}`;
+    const res = await fetch(`https://app.asana.com/api/1.0/users/${gid}`, {
+      headers: { Authorization: `Bearer ${ASANA_TOKEN}` },
+    });
+    const data = await res.json();
+    return data?.data?.name || "Unknown";
+  } catch {
+    return "Unknown";
   }
 }
 
-async function resolveTaskName(taskGid) {
-  const token = await getAccessToken();
+export async function getTaskName(gid) {
+  if (!gid) return null;
   try {
-    const resp = await fetch(
-      `https://app.asana.com/api/1.0/tasks/${taskGid}?opt_fields=name`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!resp.ok) {
-      const errText = await resp.text();
-      console.error(`❌ resolveTaskName failed for ${taskGid}: ${resp.status} ${errText}`);
-      return null;
-    }
-    const data = await resp.json();
+    const res = await fetch(`https://app.asana.com/api/1.0/tasks/${gid}`, {
+      headers: { Authorization: `Bearer ${ASANA_TOKEN}` },
+    });
+    const data = await res.json();
     return data?.data?.name || null;
-  } catch (err) {
-    console.error(`❌ Error resolving task ${taskGid}`, err);
+  } catch {
     return null;
   }
 }
 
-async function resolveProjectName(projectGid) {
-  const token = await getAccessToken();
+export async function getCommentText(storyGid) {
+  if (!storyGid) return null;
   try {
-    const resp = await fetch(
-      `https://app.asana.com/api/1.0/projects/${projectGid}?opt_fields=name`,
-      { headers: { Authorization: `Bearer ${token}` } }
+    const res = await fetch(
+      `https://app.asana.com/api/1.0/stories/${storyGid}`,
+      { headers: { Authorization: `Bearer ${ASANA_TOKEN}` } }
     );
-    if (!resp.ok) {
-      const errText = await resp.text();
-      console.error(`❌ resolveProjectName failed for ${projectGid}: ${resp.status} ${errText}`);
-      return null;
-    }
-    const data = await resp.json();
-    return data?.data?.name || null;
-  } catch (err) {
-    console.error(`❌ Error resolving project ${projectGid}`, err);
-    return null;
-  }
-}
-
-async function resolveStoryText(storyGid) {
-  const token = await getAccessToken();
-  try {
-    const resp = await fetch(
-      `https://app.asana.com/api/1.0/stories/${storyGid}?opt_fields=text`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!resp.ok) {
-      const errText = await resp.text();
-      console.error(`❌ resolveStoryText failed for ${storyGid}: ${resp.status} ${errText}`);
-      return null;
-    }
-    const data = await resp.json();
+    const data = await res.json();
     return data?.data?.text || null;
-  } catch (err) {
-    console.error(`❌ Error resolving story ${storyGid}`, err);
+  } catch {
     return null;
   }
 }
 
-module.exports = {
-  resolveUserName,
-  resolveTaskName,
-  resolveProjectName,
-  resolveStoryText
-};
+// --- Event parsing --------------------------------------------
+
+export function parseAction(ev) {
+  let action_type = ev.action || "unknown";
+  let details = {};
+
+  if (ev.resource?.resource_type === "task") {
+    if (ev.action === "added") {
+      action_type = "task_created";
+    } else if (ev.action === "removed") {
+      action_type = "task_deleted";
+    } else if (ev.action === "changed") {
+      switch (ev.change?.field) {
+        case "memberships":
+          action_type = "task_moved";
+          if (ev.change?.added_value?.section?.name) {
+            details.to_section = ev.change.added_value.section.name;
+          }
+          if (ev.change?.removed_value?.section?.name) {
+            details.from_section = ev.change.removed_value.section.name;
+          }
+          break;
+        case "name":
+          action_type = "task_renamed";
+          break;
+        case "assignee":
+          action_type = "task_reassigned";
+          break;
+      }
+    }
+  }
+
+  if (ev.resource?.resource_subtype === "comment_added") {
+    action_type = "comment_added";
+  }
+  if (ev.resource?.resource_subtype === "comment_edited") {
+    action_type = "comment_edited";
+  }
+  if (ev.resource?.resource_subtype === "comment_deleted") {
+    action_type = "comment_deleted";
+  }
+
+  return { action_type, details };
+}
