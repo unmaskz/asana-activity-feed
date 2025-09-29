@@ -7,7 +7,7 @@ import {
   getTaskName,
   getCommentText,
   parseAction,
-} from "./helpers.js";
+} from "./helpers/asana.js";
 
 const app = express();
 app.use(bodyParser.json());
