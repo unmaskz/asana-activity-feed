@@ -65,36 +65,63 @@ app.get('/oauth/callback', async (req, res) => {
 });
 
 // Webhook
-app.post("/webhook", async (req, res) => {
-  const hookSecret = req.header("X-Hook-Secret");
+app.post('/webhook', async (req, res) => {
+  const hookSecret = req.header('X-Hook-Secret');
   if (hookSecret) {
-    res.set("X-Hook-Secret", hookSecret);
-    return res.status(200).send("Handshake");
+    // Initial handshake
+    res.set('X-Hook-Secret', hookSecret);
+    return res.status(200).send('Handshake');
   }
 
   const events = req.body.events || [];
   for (const ev of events) {
     try {
       const id = uuidv4();
-      const project_id = ev.resource?.gid || null;
-      const task_id = ev.parent?.gid || (ev.resource?.resource_type === "task" ? ev.resource.gid : null);
-      const subtask_id = ev.resource?.resource_type === "subtask" ? ev.resource.gid : null;
-      const action_type = ev.action || "unknown";
-      const actor_name = ev.user?.name || ev.created_by?.name || "someone";
-      const task_name = ev.resource?.name || null;
-      const subtask_name = ev.parent?.name || null;
 
-      // Capture comment text
-      const comment_text = ev.comment?.text || ev.text || null;
+      // Determine project ID
+      // Prefer ev.resource.gid if it's a task/subtask or fallback to parent
+      let project_id = null;
+      if (ev.resource?.resource_type === 'task' || ev.resource?.resource_type === 'subtask') {
+        project_id = ev.resource.gid;
+      } else if (ev.parent?.gid) {
+        project_id = ev.parent.gid;
+      }
 
-      // Track added or removed users (assignee or collaborators)
+      const task_id = ev.parent?.gid || (ev.resource?.resource_type === 'task' ? ev.resource.gid : null);
+      const subtask_id = ev.resource?.resource_type === 'subtask' ? ev.resource.gid : null;
+      const action_type = ev.action || 'unknown';
+      const actor_name = ev.user?.name || ev.created_by?.name || 'someone';
+      let task_name = ev.resource?.name || null;
+      let subtask_name = null;
+      let comment_text = null;
       let added_user_name = null;
       let removed_user_name = null;
-      if (ev.added) added_user_name = ev.added.name || null;
-      if (ev.removed) removed_user_name = ev.removed.name || null;
+
+      // Handle story objects
+      if (ev.resource?.resource_type === 'story') {
+        comment_text = ev.resource.text || null;
+
+        // For stories, task name comes from parent task
+        if (ev.parent?.gid) {
+          try {
+            const taskResp = await fetch(`https://app.asana.com/api/1.0/tasks/${ev.parent.gid}`, {
+              headers: { Authorization: `Bearer ${process.env.ASANA_PERSONAL_ACCESS_TOKEN}` }
+            });
+            const taskData = await taskResp.json();
+            task_name = taskData.data?.name || null;
+          } catch (err) {
+            console.error('Failed to fetch task name for story', err);
+          }
+        }
+      }
+
+      // Handle added/removed users (assignee/collaborator)
+      if (ev.added?.name) added_user_name = ev.added.name;
+      if (ev.removed?.name) removed_user_name = ev.removed.name;
 
       const created_at = ev.created_at || new Date().toISOString();
 
+      // Persist the event
       await pool.query(
         `INSERT INTO events 
         (id, project_id, task_id, subtask_id, action_type, actor_name, task_name, subtask_name, comment_text, added_user_name, removed_user_name, created_at, raw_json)
@@ -102,13 +129,12 @@ app.post("/webhook", async (req, res) => {
         [id, project_id, task_id, subtask_id, action_type, actor_name, task_name, subtask_name, comment_text, added_user_name, removed_user_name, created_at, ev]
       );
     } catch (err) {
-      console.error("Failed to persist event", err);
+      console.error('Failed to persist event', err);
     }
   }
 
-  res.status(200).send("OK");
+  res.status(200).send('OK');
 });
-
 
 // API
 app.get('/api/events', async (req, res) => {
