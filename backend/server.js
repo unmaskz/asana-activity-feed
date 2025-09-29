@@ -6,6 +6,13 @@ const { v4: uuidv4 } = require('uuid');
 const { pool, runMigrations } = require('./db');
 const cors = require('cors');
 
+const {
+  resolveUserName,
+  resolveTaskName,
+  resolveProjectName,
+  resolveStoryText
+} = require('./helpers/asana');
+
 const app = express();
 app.use(cors({
   origin: '*', // allow any origin
@@ -77,89 +84,51 @@ app.post('/webhook', async (req, res) => {
   for (const ev of events) {
     try {
       const id = uuidv4();
-      const created_at = ev.created_at || new Date().toISOString();
-      const action_type = ev.action || 'unknown';
 
-      let task_id = null;
-      let subtask_id = null;
-      let task_name = null;
-      let subtask_name = null;
-      let project_id = null;
-      let comment_text = null;
-      let added_user_name = null;
-      let removed_user_name = null;
-
-      // --- Actor (user) ---
+      // Actor name
       let actor_name = 'someone';
       if (ev.user?.gid) {
-        try {
-          const userResp = await fetch(`https://app.asana.com/api/1.0/users/${ev.user.gid}?opt_fields=name`, {
-            headers: { Authorization: `Bearer ${process.env.ASANA_PERSONAL_ACCESS_TOKEN}` }
-          });
-
-          if (!userResp.ok) {
-            const errText = await userResp.text();
-            console.error(`User fetch failed for ${ev.user.gid}: ${userResp.status} ${errText}`);
-          } else {
-            const userData = await userResp.json();
-            actor_name = userData?.data?.name || `user-${ev.user.gid}`;
-          }
-        } catch (err) {
-          console.error(`Error fetching user ${ev.user.gid}`, err);
-        }
+        actor_name = await resolveUserName(ev.user.gid);
       }
 
-      // --- Task/Subtask/Story ---
+      // Task name
+      let task_name = null;
       if (ev.resource?.resource_type === 'task') {
-        task_id = ev.resource.gid;
-      } else if (ev.resource?.resource_type === 'subtask') {
-        subtask_id = ev.resource.gid;
-        task_id = ev.parent?.gid || null;
-      } else if (ev.resource?.resource_type === 'story') {
-        task_id = ev.parent?.gid || null;
-
-        // Fetch comment text for comment_added
-        if (ev.resource.resource_subtype === 'comment_added') {
-          try {
-            const storyResp = await fetch(`https://app.asana.com/api/1.0/stories/${ev.resource.gid}`, {
-              headers: { Authorization: `Bearer ${process.env.ASANA_PERSONAL_ACCESS_TOKEN}` }
-            });
-            const storyData = await storyResp.json();
-            comment_text = storyData.data?.text || null;
-          } catch (err) {
-            console.error('Failed to fetch story text', err);
-          }
-        }
+        task_name = await resolveTaskName(ev.resource.gid);
       }
 
-      // --- Fetch task for name & project ---
-      if (task_id) {
-        try {
-          const taskResp = await fetch(`https://app.asana.com/api/1.0/tasks/${task_id}?opt_fields=name,projects`, {
-            headers: { Authorization: `Bearer ${process.env.ASANA_PERSONAL_ACCESS_TOKEN}` }
-          });
-          const taskData = await taskResp.json();
-          task_name = taskData.data?.name || null;
-          project_id = taskData.data?.projects?.[0]?.gid || null;
-        } catch (err) {
-          console.error('Failed to fetch task details', err);
-        }
+      // Project name
+      let project_id = null;
+      let project_name = null;
+      if (ev.parent?.resource_type === 'project' || ev.resource?.resource_type === 'project') {
+        const pid = ev.parent?.gid || ev.resource?.gid;
+        project_id = pid;
+        project_name = await resolveProjectName(pid);
       }
 
-      // --- Added/removed users ---
-      if (ev.added?.name) added_user_name = ev.added.name;
-      if (ev.removed?.name) removed_user_name = ev.removed.name;
+      // Comment text
+      let comment_text = null;
+      if (ev.resource?.resource_subtype === 'comment_added') {
+        comment_text = await resolveStoryText(ev.resource.gid);
+      }
 
-      // --- Save ---
       await pool.query(
-        `INSERT INTO events
-        (id, project_id, task_id, subtask_id, action_type, actor_name, task_name, subtask_name, comment_text, added_user_name, removed_user_name, created_at, raw_json)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-        [id, project_id, task_id, subtask_id, action_type, actor_name, task_name, subtask_name, comment_text, added_user_name, removed_user_name, created_at, ev]
+        `INSERT INTO events 
+        (id, project_id, task_id, action_type, actor_name, task_name, comment_text, raw_json) 
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          id,
+          project_id,
+          ev.resource?.gid || ev.parent?.gid || null,
+          ev.action,
+          actor_name,
+          task_name,
+          comment_text,
+          ev
+        ]
       );
-
     } catch (err) {
-      console.error('Failed to persist event', err);
+      console.error('Failed to persist event', err, ev);
     }
   }
 
