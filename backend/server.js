@@ -9,7 +9,7 @@ const {
   getTaskName,
   getCommentText,
   parseAction,
-} = require("./helpers");
+} = require("./helpers/asana.js");
 
 const app = express();
 app.use(cors({ origin: process.env.FRONTEND_ORIGIN || "*" }));
