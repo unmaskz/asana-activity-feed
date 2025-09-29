@@ -24,8 +24,6 @@ app.use(cookieParser(process.env.COOKIE_SECRET || 'devsecret'));
 const PORT = process.env.PORT || 4000;
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
 
-runMigrations().then(() => console.log('Migrations applied')).catch(console.error);
-
 // OAuth
 app.get('/auth', (req, res) => {
   const clientId = process.env.ASANA_CLIENT_ID;
