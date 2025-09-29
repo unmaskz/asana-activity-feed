@@ -88,18 +88,24 @@ app.post('/webhook', async (req, res) => {
       let comment_text = null;
       let added_user_name = null;
       let removed_user_name = null;
-      let actor_name = 'someone';
 
       // --- Actor (user) ---
+      let actor_name = 'someone';
       if (ev.user?.gid) {
         try {
           const userResp = await fetch(`https://app.asana.com/api/1.0/users/${ev.user.gid}?opt_fields=name`, {
             headers: { Authorization: `Bearer ${process.env.ASANA_PERSONAL_ACCESS_TOKEN}` }
           });
-          const userData = await userResp.json();
-          actor_name = userData.data?.name || 'someone';
+
+          if (!userResp.ok) {
+            const errText = await userResp.text();
+            console.error(`User fetch failed for ${ev.user.gid}: ${userResp.status} ${errText}`);
+          } else {
+            const userData = await userResp.json();
+            actor_name = userData?.data?.name || `user-${ev.user.gid}`;
+          }
         } catch (err) {
-          console.error('Failed to fetch actor user', err);
+          console.error(`Error fetching user ${ev.user.gid}`, err);
         }
       }
 
