@@ -7,7 +7,11 @@ const { pool, runMigrations } = require('./db');
 const cors = require('cors');
 
 const app = express();
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN || '*' }));
+app.use(cors({
+  origin: '*', // allow any origin
+  methods: ['GET','POST','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization','X-Requested-With']
+}));
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser(process.env.COOKIE_SECRET || 'devsecret'));
 
