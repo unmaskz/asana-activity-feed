@@ -4,8 +4,10 @@ const fetch = require('node-fetch');
 const cookieParser = require('cookie-parser');
 const { v4: uuidv4 } = require('uuid');
 const { pool, runMigrations } = require('./db');
+const cors = require('cors');
 
 const app = express();
+app.use(cors({ origin: process.env.FRONTEND_ORIGIN || '*' }));
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser(process.env.COOKIE_SECRET || 'devsecret'));
 
