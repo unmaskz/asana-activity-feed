@@ -83,12 +83,25 @@ app.post("/webhook", async (req, res) => {
     try {
       const eventId = uuidv4();
 
-      // Find user by Asana user ID to get their access token
+      // Try to find user by Asana user ID, fallback to any user's token or PAT
       let userAccessToken = null;
       if (ev.user?.gid) {
+        console.log(`Looking for user with Asana ID: ${ev.user.gid}`);
         const userResult = await pool.query('SELECT access_token FROM users WHERE asana_user_id = $1', [ev.user.gid]);
+        console.log(`Found ${userResult.rows.length} users with that ID`);
         if (userResult.rows.length > 0) {
           userAccessToken = userResult.rows[0].access_token;
+          console.log(`Using specific user's access token`);
+        } else {
+          console.log('User not found, trying to use any available user token');
+          // Fallback: use any user's token from the database
+          const anyUserResult = await pool.query('SELECT access_token FROM users WHERE access_token IS NOT NULL LIMIT 1');
+          if (anyUserResult.rows.length > 0) {
+            userAccessToken = anyUserResult.rows[0].access_token;
+            console.log('Using any available user token');
+          } else {
+            console.log('No user tokens available, will use PAT');
+          }
         }
       }
 

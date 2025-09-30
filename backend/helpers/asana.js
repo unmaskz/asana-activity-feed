@@ -5,14 +5,25 @@ const ASANA_TOKEN = process.env.ASANA_PAT;
 async function getUserName(gid, accessToken = null) {
   if (!gid) return "Unknown";
   const token = accessToken || ASANA_TOKEN;
-  if (!token) return "Unknown";
+  if (!token) {
+    console.log(`No token available for user ${gid}`);
+    return "Unknown";
+  }
   try {
+    console.log(`Fetching user name for ${gid} with token: ${accessToken ? 'user token' : 'PAT'}`);
     const res = await fetch(`https://app.asana.com/api/1.0/users/${gid}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
-    return data?.data?.name || "Unknown";
-  } catch {
+    console.log(`User API response status: ${res.status}`);
+    if (res.status === 200 && data?.data?.name) {
+      return data.data.name;
+    } else {
+      console.log(`User API error:`, data);
+      return "Unknown";
+    }
+  } catch (err) {
+    console.log(`Error fetching user ${gid}:`, err.message);
     return "Unknown";
   }
 }
@@ -20,14 +31,25 @@ async function getUserName(gid, accessToken = null) {
 async function getTaskName(gid, accessToken = null) {
   if (!gid) return null;
   const token = accessToken || ASANA_TOKEN;
-  if (!token) return null;
+  if (!token) {
+    console.log(`No token available for task ${gid}`);
+    return null;
+  }
   try {
+    console.log(`Fetching task name for ${gid} with token: ${accessToken ? 'user token' : 'PAT'}`);
     const res = await fetch(`https://app.asana.com/api/1.0/tasks/${gid}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
-    return data?.data?.name || null;
-  } catch {
+    console.log(`Task API response status: ${res.status}`);
+    if (res.status === 200 && data?.data?.name) {
+      return data.data.name;
+    } else {
+      console.log(`Task API error:`, data);
+      return null;
+    }
+  } catch (err) {
+    console.log(`Error fetching task ${gid}:`, err.message);
     return null;
   }
 }
