@@ -172,13 +172,45 @@ app.post("/webhook", async (req, res) => {
 app.get('/api/events', async (req, res) => {
   try {
     const project = req.query.project || null;
+    const limit = parseInt(req.query.limit) || 100;
+    const offset = parseInt(req.query.offset) || 0;
+    
     let rows;
     if (project) {
-      rows = (await pool.query('SELECT * FROM events WHERE project_id = $1 ORDER BY created_at DESC LIMIT 500', [project])).rows;
+      rows = (await pool.query(
+        'SELECT * FROM events WHERE project_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3', 
+        [project, limit, offset]
+      )).rows;
     } else {
-      rows = (await pool.query('SELECT * FROM events ORDER BY created_at DESC LIMIT 500')).rows;
+      rows = (await pool.query(
+        'SELECT * FROM events ORDER BY created_at DESC LIMIT $1 OFFSET $2', 
+        [limit, offset]
+      )).rows;
     }
-    res.json({ data: rows });
+    
+    // Format events for better readability
+    const formattedEvents = rows.map(event => ({
+      id: event.id,
+      timestamp: event.created_at,
+      actor: event.actor_name,
+      action: event.action_type,
+      task: event.task_name,
+      project: event.project_id,
+      details: {
+        comment: event.comment_text,
+        from_section: event.from_section,
+        to_section: event.to_section,
+        added_user: event.added_user_name,
+        removed_user: event.removed_user_name
+      },
+      raw: event.raw_json
+    }));
+    
+    res.json({ 
+      data: formattedEvents,
+      count: formattedEvents.length,
+      hasMore: formattedEvents.length === limit
+    });
   } catch (err) {
     console.error(err);
     res.status(500).send('error');
@@ -209,6 +241,48 @@ app.post('/api/webhooks/create', async (req, res) => {
 });
 
 app.get('/health', (req, res) => res.json({ ok: true }));
+
+// Activity summary endpoint
+app.get('/api/activity/summary', async (req, res) => {
+  try {
+    const hours = parseInt(req.query.hours) || 24;
+    const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
+    
+    const summary = await pool.query(`
+      SELECT 
+        action_type,
+        COUNT(*) as count,
+        COUNT(DISTINCT actor_name) as unique_actors,
+        COUNT(DISTINCT task_id) as unique_tasks
+      FROM events 
+      WHERE created_at >= $1 
+      GROUP BY action_type 
+      ORDER BY count DESC
+    `, [cutoff]);
+    
+    const recentEvents = await pool.query(`
+      SELECT actor_name, action_type, task_name, created_at
+      FROM events 
+      WHERE created_at >= $1 
+      ORDER BY created_at DESC 
+      LIMIT 10
+    `, [cutoff]);
+    
+    res.json({
+      period: `${hours} hours`,
+      summary: summary.rows,
+      recent_activity: recentEvents.rows.map(event => ({
+        who: event.actor_name,
+        did: event.action_type,
+        what: event.task_name,
+        when: event.created_at
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // Test endpoint to verify PAT works
 app.get('/test-pat', async (req, res) => {
