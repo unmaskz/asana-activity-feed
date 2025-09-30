@@ -85,19 +85,26 @@ app.post("/webhook", async (req, res) => {
 
       // Try to find user by Asana user ID, fallback to any user's token or PAT
       let userAccessToken = null;
+      let userRefreshToken = null;
+      let userId = null;
+      
       if (ev.user?.gid) {
         console.log(`Looking for user with Asana ID: ${ev.user.gid}`);
-        const userResult = await pool.query('SELECT access_token FROM users WHERE asana_user_id = $1', [ev.user.gid]);
+        const userResult = await pool.query('SELECT id, access_token, refresh_token FROM users WHERE asana_user_id = $1', [ev.user.gid]);
         console.log(`Found ${userResult.rows.length} users with that ID`);
         if (userResult.rows.length > 0) {
           userAccessToken = userResult.rows[0].access_token;
+          userRefreshToken = userResult.rows[0].refresh_token;
+          userId = userResult.rows[0].id;
           console.log(`Using specific user's access token`);
         } else {
           console.log('User not found, trying to use any available user token');
           // Fallback: use any user's token from the database
-          const anyUserResult = await pool.query('SELECT access_token FROM users WHERE access_token IS NOT NULL LIMIT 1');
+          const anyUserResult = await pool.query('SELECT id, access_token, refresh_token FROM users WHERE access_token IS NOT NULL LIMIT 1');
           if (anyUserResult.rows.length > 0) {
             userAccessToken = anyUserResult.rows[0].access_token;
+            userRefreshToken = anyUserResult.rows[0].refresh_token;
+            userId = anyUserResult.rows[0].id;
             console.log('Using any available user token');
           } else {
             console.log('No user tokens available, will use PAT');
@@ -105,14 +112,14 @@ app.post("/webhook", async (req, res) => {
         }
       }
 
-      const actor_name = await getUserName(ev.user?.gid, userAccessToken);
+      const actor_name = await getUserName(ev.user?.gid, userAccessToken, userRefreshToken, userId);
       const task_id =
         ev.resource?.resource_type === "task"
           ? ev.resource.gid
           : ev.parent?.gid;
       const subtask_id =
         ev.parent?.resource_type === "subtask" ? ev.parent.gid : null;
-      const task_name = await getTaskName(task_id, userAccessToken);
+      const task_name = await getTaskName(task_id, userAccessToken, userRefreshToken, userId);
 
       const { action_type, details } = parseAction(ev);
 
@@ -207,8 +214,8 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 app.get('/test-pat', async (req, res) => {
   try {
     const testUserId = '1210937020161294'; // The user ID from your webhook
-    const actor_name = await getUserName(testUserId);
-    const task_name = await getTaskName('1211495423706664'); // The task ID from your webhook
+    const actor_name = await getUserName(testUserId, null, null, null);
+    const task_name = await getTaskName('1211495423706664', null, null, null); // The task ID from your webhook
     
     res.json({
       pat_available: !!process.env.ASANA_PAT,

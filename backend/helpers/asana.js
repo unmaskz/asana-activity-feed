@@ -2,7 +2,43 @@ const fetch = require("node-fetch");
 
 const ASANA_TOKEN = process.env.ASANA_PAT;
 
-async function getUserName(gid, accessToken = null) {
+// Token refresh function
+async function refreshAccessToken(refreshToken, userId = null) {
+  try {
+    const response = await fetch('https://app.asana.com/-/oauth_token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: process.env.ASANA_CLIENT_ID,
+        client_secret: process.env.ASANA_CLIENT_SECRET,
+        refresh_token: refreshToken
+      })
+    });
+    
+    const data = await response.json();
+    if (data.access_token) {
+      // Update database if userId provided
+      if (userId) {
+        const { pool } = require('./db');
+        await pool.query(
+          'UPDATE users SET access_token = $1, refresh_token = $2 WHERE id = $3',
+          [data.access_token, data.refresh_token || refreshToken, userId]
+        );
+        console.log('Updated tokens in database for user:', userId);
+      }
+      return data;
+    } else {
+      console.log('Token refresh failed:', data);
+      return null;
+    }
+  } catch (err) {
+    console.log('Token refresh error:', err.message);
+    return null;
+  }
+}
+
+async function getUserName(gid, accessToken = null, refreshToken = null, userId = null) {
   if (!gid) return "Unknown";
   const token = accessToken || ASANA_TOKEN;
   if (!token) {
@@ -16,19 +52,33 @@ async function getUserName(gid, accessToken = null) {
     });
     const data = await res.json();
     console.log(`User API response status: ${res.status}`);
+    
     if (res.status === 200 && data?.data?.name) {
       return data.data.name;
-    } else {
-      console.log(`User API error:`, data);
-      return "Unknown";
+    } else if (res.status === 401 && data?.errors?.[0]?.message?.includes('expired') && refreshToken) {
+      console.log('Token expired, attempting refresh...');
+      const refreshData = await refreshAccessToken(refreshToken, userId);
+      if (refreshData?.access_token) {
+        console.log('Token refreshed successfully, retrying API call');
+        const retryRes = await fetch(`https://app.asana.com/api/1.0/users/${gid}`, {
+          headers: { Authorization: `Bearer ${refreshData.access_token}` },
+        });
+        const retryData = await retryRes.json();
+        if (retryRes.status === 200 && retryData?.data?.name) {
+          return retryData.data.name;
+        }
+      }
     }
+    
+    console.log(`User API error:`, data);
+    return "Unknown";
   } catch (err) {
     console.log(`Error fetching user ${gid}:`, err.message);
     return "Unknown";
   }
 }
 
-async function getTaskName(gid, accessToken = null) {
+async function getTaskName(gid, accessToken = null, refreshToken = null, userId = null) {
   if (!gid) return null;
   const token = accessToken || ASANA_TOKEN;
   if (!token) {
@@ -42,12 +92,26 @@ async function getTaskName(gid, accessToken = null) {
     });
     const data = await res.json();
     console.log(`Task API response status: ${res.status}`);
+    
     if (res.status === 200 && data?.data?.name) {
       return data.data.name;
-    } else {
-      console.log(`Task API error:`, data);
-      return null;
+    } else if (res.status === 401 && data?.errors?.[0]?.message?.includes('expired') && refreshToken) {
+      console.log('Token expired, attempting refresh...');
+      const refreshData = await refreshAccessToken(refreshToken, userId);
+      if (refreshData?.access_token) {
+        console.log('Token refreshed successfully, retrying API call');
+        const retryRes = await fetch(`https://app.asana.com/api/1.0/tasks/${gid}`, {
+          headers: { Authorization: `Bearer ${refreshData.access_token}` },
+        });
+        const retryData = await retryRes.json();
+        if (retryRes.status === 200 && retryData?.data?.name) {
+          return retryData.data.name;
+        }
+      }
     }
+    
+    console.log(`Task API error:`, data);
+    return null;
   } catch (err) {
     console.log(`Error fetching task ${gid}:`, err.message);
     return null;
