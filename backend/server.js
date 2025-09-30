@@ -21,6 +21,17 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser(process.env.COOKIE_SECRET || 'devsecret'));
 
+// Run database migrations on startup
+(async () => {
+  try {
+    const { runMigrations } = require('./db');
+    await runMigrations();
+    console.log('Database migrations completed successfully');
+  } catch (err) {
+    console.error('Failed to run migrations:', err);
+  }
+})();
+
 const PORT = process.env.PORT || 4000;
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
 
@@ -298,6 +309,18 @@ app.get('/health', async (req, res) => {
       database: 'disconnected',
       error: err.message 
     });
+  }
+});
+
+// Manual migration endpoint
+app.post('/migrate', async (req, res) => {
+  try {
+    const { runMigrations } = require('./db');
+    await runMigrations();
+    res.json({ success: true, message: 'Migrations completed' });
+  } catch (err) {
+    console.error('Migration failed:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
