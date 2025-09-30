@@ -203,4 +203,25 @@ app.post('/api/webhooks/create', async (req, res) => {
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
-app.listen(PORT, () => console.log(`Backend running on port ${PORT}`));
+// Test endpoint to verify PAT works
+app.get('/test-pat', async (req, res) => {
+  try {
+    const testUserId = '1210937020161294'; // The user ID from your webhook
+    const actor_name = await getUserName(testUserId);
+    const task_name = await getTaskName('1211495423706664'); // The task ID from your webhook
+    
+    res.json({
+      pat_available: !!process.env.ASANA_PAT,
+      test_user_name: actor_name,
+      test_task_name: task_name
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`Backend running on port ${PORT}`);
+  console.log(`ASANA_PAT available: ${process.env.ASANA_PAT ? 'YES' : 'NO'}`);
+  console.log(`Database URL available: ${process.env.DATABASE_URL ? 'YES' : 'NO'}`);
+});
