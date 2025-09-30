@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS events (
   removed_user_name TEXT,
   from_section TEXT,
   to_section TEXT,
+  from_position TEXT,
+  to_position TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
   raw_json JSONB
 );
@@ -33,3 +35,5 @@ ALTER TABLE events ADD COLUMN IF NOT EXISTS added_user_name TEXT;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS removed_user_name TEXT;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS from_section TEXT;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS to_section TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS from_position TEXT;
+ALTER TABLE events ADD COLUMN IF NOT EXISTS to_position TEXT;

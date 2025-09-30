@@ -140,8 +140,8 @@ app.post("/webhook", async (req, res) => {
       await pool.query(
       `INSERT INTO events
       (id, project_id, task_id, subtask_id, action_type, actor_name, task_name, subtask_name, comment_text,
-        added_user_name, removed_user_name, from_section, to_section, created_at, raw_json)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+        added_user_name, removed_user_name, from_section, to_section, from_position, to_position, created_at, raw_json)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
       [
         eventId,
         project_id,
@@ -156,6 +156,8 @@ app.post("/webhook", async (req, res) => {
         details.removed_user_name || null,
         details.from_section || null,
         details.to_section || null,
+        details.from_position || null,
+        details.to_position || null,
         ev.created_at, // <-- Asana timestamp
         ev,
       ]
@@ -200,6 +202,8 @@ app.get('/api/events', async (req, res) => {
         comment: event.comment_text,
         from_section: event.from_section,
         to_section: event.to_section,
+        from_position: event.from_position,
+        to_position: event.to_position,
         added_user: event.added_user_name,
         removed_user: event.removed_user_name
       },

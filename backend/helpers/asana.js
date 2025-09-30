@@ -156,6 +156,13 @@ function parseAction(ev) {
           if (ev.change?.removed_value?.section?.name) {
             details.from_section = ev.change.removed_value.section.name;
           }
+          // Track position changes within same section
+          if (ev.change?.added_value?.section?.name === ev.change?.removed_value?.section?.name) {
+            action_type = "task_reordered";
+            details.section = ev.change.added_value.section.name;
+            details.from_position = ev.change.removed_value?.insert_after || "top";
+            details.to_position = ev.change.added_value?.insert_after || "top";
+          }
           break;
         case "name":
           action_type = "task_renamed";
