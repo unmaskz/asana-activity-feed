@@ -83,20 +83,29 @@ app.post("/webhook", async (req, res) => {
     try {
       const eventId = uuidv4();
 
-      const actor_name = await getUserName(ev.user?.gid);
+      // Find user by Asana user ID to get their access token
+      let userAccessToken = null;
+      if (ev.user?.gid) {
+        const userResult = await pool.query('SELECT access_token FROM users WHERE asana_user_id = $1', [ev.user.gid]);
+        if (userResult.rows.length > 0) {
+          userAccessToken = userResult.rows[0].access_token;
+        }
+      }
+
+      const actor_name = await getUserName(ev.user?.gid, userAccessToken);
       const task_id =
         ev.resource?.resource_type === "task"
           ? ev.resource.gid
           : ev.parent?.gid;
       const subtask_id =
         ev.parent?.resource_type === "subtask" ? ev.parent.gid : null;
-      const task_name = await getTaskName(task_id);
+      const task_name = await getTaskName(task_id, userAccessToken);
 
       const { action_type, details } = parseAction(ev);
 
       let comment_text = null;
       if (action_type === "comment_added" || action_type === "comment_edited") {
-        comment_text = await getCommentText(ev.resource.gid);
+        comment_text = await getCommentText(ev.resource.gid, userAccessToken);
       }
 
       let project_id = null;

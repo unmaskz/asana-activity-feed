@@ -2,11 +2,13 @@ const fetch = require("node-fetch");
 
 const ASANA_TOKEN = process.env.ASANA_PAT;
 
-async function getUserName(gid) {
+async function getUserName(gid, accessToken = null) {
   if (!gid) return "Unknown";
+  const token = accessToken || ASANA_TOKEN;
+  if (!token) return "Unknown";
   try {
     const res = await fetch(`https://app.asana.com/api/1.0/users/${gid}`, {
-      headers: { Authorization: `Bearer ${ASANA_TOKEN}` },
+      headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
     return data?.data?.name || "Unknown";
@@ -15,11 +17,13 @@ async function getUserName(gid) {
   }
 }
 
-async function getTaskName(gid) {
+async function getTaskName(gid, accessToken = null) {
   if (!gid) return null;
+  const token = accessToken || ASANA_TOKEN;
+  if (!token) return null;
   try {
     const res = await fetch(`https://app.asana.com/api/1.0/tasks/${gid}`, {
-      headers: { Authorization: `Bearer ${ASANA_TOKEN}` },
+      headers: { Authorization: `Bearer ${token}` },
     });
     const data = await res.json();
     return data?.data?.name || null;
@@ -28,12 +32,14 @@ async function getTaskName(gid) {
   }
 }
 
-async function getCommentText(storyGid) {
+async function getCommentText(storyGid, accessToken = null) {
   if (!storyGid) return null;
+  const token = accessToken || ASANA_TOKEN;
+  if (!token) return null;
   try {
     const res = await fetch(
       `https://app.asana.com/api/1.0/stories/${storyGid}`,
-      { headers: { Authorization: `Bearer ${ASANA_TOKEN}` } }
+      { headers: { Authorization: `Bearer ${token}` } }
     );
     const data = await res.json();
     return data?.data?.text || null;
