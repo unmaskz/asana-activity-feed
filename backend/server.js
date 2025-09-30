@@ -70,7 +70,12 @@ app.get('/oauth/callback', async (req, res) => {
 
 // --- Webhook endpoint
 app.post("/webhook", async (req, res) => {
+  console.log("=== WEBHOOK RECEIVED ===");
+  console.log("Headers:", req.headers);
+  console.log("Body:", JSON.stringify(req.body, null, 2));
+  
   if (req.headers["x-hook-secret"]) {
+    console.log("Handling webhook secret verification");
     return res
       .set("X-Hook-Secret", req.headers["x-hook-secret"])
       .status(200)
@@ -78,6 +83,7 @@ app.post("/webhook", async (req, res) => {
   }
 
   const events = req.body.events || [];
+  console.log(`Processing ${events.length} events`);
 
   for (const ev of events) {
     try {
@@ -168,6 +174,7 @@ app.post("/webhook", async (req, res) => {
     }
   }
 
+  console.log("=== WEBHOOK PROCESSING COMPLETE ===");
   res.status(200).send("ok");
 });
 
@@ -244,7 +251,31 @@ app.post('/api/webhooks/create', async (req, res) => {
   }
 });
 
-app.get('/health', (req, res) => res.json({ ok: true }));
+app.get('/health', async (req, res) => {
+  try {
+    // Test database connection
+    await pool.query('SELECT 1');
+    res.json({ 
+      ok: true, 
+      database: 'connected',
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Health check failed:', err);
+    res.status(500).json({ 
+      ok: false, 
+      database: 'disconnected',
+      error: err.message 
+    });
+  }
+});
+
+// Test webhook endpoint
+app.post('/test-webhook', (req, res) => {
+  console.log("=== TEST WEBHOOK RECEIVED ===");
+  console.log("Body:", req.body);
+  res.json({ received: true, body: req.body });
+});
 
 // Activity summary endpoint
 app.get('/api/activity/summary', async (req, res) => {
