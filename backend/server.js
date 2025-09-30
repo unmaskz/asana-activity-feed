@@ -84,8 +84,14 @@ app.post("/webhook", async (req, res) => {
 
   const events = req.body.events || [];
   console.log(`Processing ${events.length} events`);
+  
+  if (events.length === 0) {
+    console.log("No events in webhook payload");
+    console.log("Full body structure:", Object.keys(req.body));
+  }
 
   for (const ev of events) {
+    console.log("Processing event:", JSON.stringify(ev, null, 2));
     try {
       const eventId = uuidv4();
 
@@ -127,7 +133,10 @@ app.post("/webhook", async (req, res) => {
         ev.parent?.resource_type === "subtask" ? ev.parent.gid : null;
       const task_name = await getTaskName(task_id, userAccessToken, userRefreshToken, userId);
 
+      console.log(`Event data: actor=${actor_name}, task=${task_name}, task_id=${task_id}`);
+
       const { action_type, details } = parseAction(ev);
+      console.log(`Parsed action: ${action_type}`, details);
 
       let comment_text = null;
       if (action_type === "comment_added" || action_type === "comment_edited") {
@@ -248,6 +257,28 @@ app.post('/api/webhooks/create', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).send('error creating webhook');
+  }
+});
+
+// List existing webhooks
+app.get('/api/webhooks/list', async (req, res) => {
+  try {
+    const { user_id } = req.query;
+    const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [user_id]);
+    const user = rows[0];
+    if (!user) return res.status(404).send('User not found');
+
+    const resp = await fetch(`https://app.asana.com/api/1.0/webhooks`, {
+      headers: {
+        Authorization: `Bearer ${user.access_token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    const j = await resp.json();
+    res.json(j);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('error listing webhooks');
   }
 });
 
