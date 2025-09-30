@@ -140,6 +140,7 @@ function parseAction(ev) {
   let action_type = ev.action || "unknown";
   let details = {};
 
+  // Task events
   if (ev.resource?.resource_type === "task") {
     if (ev.action === "added") {
       action_type = "task_created";
@@ -162,10 +163,32 @@ function parseAction(ev) {
         case "assignee":
           action_type = "task_reassigned";
           break;
+        case "due_date":
+          action_type = "task_due_date_changed";
+          break;
+        case "completed":
+          action_type = ev.change?.action === "changed" ? "task_completed" : "task_uncompleted";
+          break;
+        case "description":
+          action_type = "task_description_changed";
+          break;
+        case "notes":
+          action_type = "task_notes_changed";
+          break;
+        case "priority":
+          action_type = "task_priority_changed";
+          break;
+        case "tags":
+          action_type = "task_tags_changed";
+          break;
+        case "followers":
+          action_type = "task_followers_changed";
+          break;
       }
     }
   }
 
+  // Comment events
   if (ev.resource?.resource_subtype === "comment_added") {
     action_type = "comment_added";
   }
@@ -174,6 +197,57 @@ function parseAction(ev) {
   }
   if (ev.resource?.resource_subtype === "comment_deleted") {
     action_type = "comment_deleted";
+  }
+
+  // Project events
+  if (ev.resource?.resource_type === "project") {
+    if (ev.action === "added") {
+      action_type = "project_created";
+    } else if (ev.action === "removed") {
+      action_type = "project_deleted";
+    } else if (ev.action === "changed") {
+      switch (ev.change?.field) {
+        case "name":
+          action_type = "project_renamed";
+          break;
+        case "archived":
+          action_type = ev.change?.action === "changed" ? "project_archived" : "project_unarchived";
+          break;
+        case "color":
+          action_type = "project_color_changed";
+          break;
+        case "notes":
+          action_type = "project_notes_changed";
+          break;
+      }
+    }
+  }
+
+  // Subtask events
+  if (ev.resource?.resource_type === "subtask") {
+    if (ev.action === "added") {
+      action_type = "subtask_created";
+    } else if (ev.action === "removed") {
+      action_type = "subtask_deleted";
+    } else if (ev.action === "changed") {
+      switch (ev.change?.field) {
+        case "name":
+          action_type = "subtask_renamed";
+          break;
+        case "completed":
+          action_type = ev.change?.action === "changed" ? "subtask_completed" : "subtask_uncompleted";
+          break;
+      }
+    }
+  }
+
+  // Attachment events
+  if (ev.resource?.resource_type === "attachment") {
+    if (ev.action === "added") {
+      action_type = "attachment_added";
+    } else if (ev.action === "removed") {
+      action_type = "attachment_removed";
+    }
   }
 
   return { action_type, details };
