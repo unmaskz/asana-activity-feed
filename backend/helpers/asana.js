@@ -40,13 +40,23 @@ async function refreshAccessToken(refreshToken, userId = null) {
 
 async function getUserName(gid, accessToken = null, refreshToken = null, userId = null) {
   if (!gid) return "Unknown";
-  const token = accessToken || ASANA_TOKEN;
+  
+  // Try user token first, then PAT
+  let token = accessToken;
+  let tokenType = 'user';
+  
+  if (!token || token === '') {
+    token = ASANA_TOKEN;
+    tokenType = 'PAT';
+  }
+  
   if (!token) {
     console.log(`No token available for user ${gid}`);
     return "Unknown";
   }
+  
   try {
-    console.log(`Fetching user name for ${gid} with token: ${accessToken ? 'user token' : 'PAT'}`);
+    console.log(`Fetching user name for ${gid} with ${tokenType} token`);
     const res = await fetch(`https://app.asana.com/api/1.0/users/${gid}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -55,17 +65,16 @@ async function getUserName(gid, accessToken = null, refreshToken = null, userId 
     
     if (res.status === 200 && data?.data?.name) {
       return data.data.name;
-    } else if (res.status === 401 && data?.errors?.[0]?.message?.includes('expired') && refreshToken) {
-      console.log('Token expired, attempting refresh...');
-      const refreshData = await refreshAccessToken(refreshToken, userId);
-      if (refreshData?.access_token) {
-        console.log('Token refreshed successfully, retrying API call');
-        const retryRes = await fetch(`https://app.asana.com/api/1.0/users/${gid}`, {
-          headers: { Authorization: `Bearer ${refreshData.access_token}` },
+    } else if (res.status === 401 && data?.errors?.[0]?.message?.includes('expired')) {
+      console.log(`Token expired, trying PAT fallback`);
+      if (tokenType === 'user' && ASANA_TOKEN) {
+        const patRes = await fetch(`https://app.asana.com/api/1.0/users/${gid}`, {
+          headers: { Authorization: `Bearer ${ASANA_TOKEN}` },
         });
-        const retryData = await retryRes.json();
-        if (retryRes.status === 200 && retryData?.data?.name) {
-          return retryData.data.name;
+        const patData = await patRes.json();
+        if (patRes.status === 200 && patData?.data?.name) {
+          console.log(`PAT fallback successful`);
+          return patData.data.name;
         }
       }
     }
@@ -80,13 +89,23 @@ async function getUserName(gid, accessToken = null, refreshToken = null, userId 
 
 async function getTaskName(gid, accessToken = null, refreshToken = null, userId = null) {
   if (!gid) return null;
-  const token = accessToken || ASANA_TOKEN;
+  
+  // Try user token first, then PAT
+  let token = accessToken;
+  let tokenType = 'user';
+  
+  if (!token || token === '') {
+    token = ASANA_TOKEN;
+    tokenType = 'PAT';
+  }
+  
   if (!token) {
     console.log(`No token available for task ${gid}`);
     return null;
   }
+  
   try {
-    console.log(`Fetching task name for ${gid} with token: ${accessToken ? 'user token' : 'PAT'}`);
+    console.log(`Fetching task name for ${gid} with ${tokenType} token`);
     const res = await fetch(`https://app.asana.com/api/1.0/tasks/${gid}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -95,17 +114,16 @@ async function getTaskName(gid, accessToken = null, refreshToken = null, userId 
     
     if (res.status === 200 && data?.data?.name) {
       return data.data.name;
-    } else if (res.status === 401 && data?.errors?.[0]?.message?.includes('expired') && refreshToken) {
-      console.log('Token expired, attempting refresh...');
-      const refreshData = await refreshAccessToken(refreshToken, userId);
-      if (refreshData?.access_token) {
-        console.log('Token refreshed successfully, retrying API call');
-        const retryRes = await fetch(`https://app.asana.com/api/1.0/tasks/${gid}`, {
-          headers: { Authorization: `Bearer ${refreshData.access_token}` },
+    } else if (res.status === 401 && data?.errors?.[0]?.message?.includes('expired')) {
+      console.log(`Token expired, trying PAT fallback`);
+      if (tokenType === 'user' && ASANA_TOKEN) {
+        const patRes = await fetch(`https://app.asana.com/api/1.0/tasks/${gid}`, {
+          headers: { Authorization: `Bearer ${ASANA_TOKEN}` },
         });
-        const retryData = await retryRes.json();
-        if (retryRes.status === 200 && retryData?.data?.name) {
-          return retryData.data.name;
+        const patData = await patRes.json();
+        if (patRes.status === 200 && patData?.data?.name) {
+          console.log(`PAT fallback successful`);
+          return patData.data.name;
         }
       }
     }
