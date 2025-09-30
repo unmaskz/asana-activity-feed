@@ -110,6 +110,7 @@ app.post("/webhook", async (req, res) => {
       let userAccessToken = null;
       let userRefreshToken = null;
       let userId = null;
+      let tokenSource = 'none';
       
       if (ev.user?.gid) {
         console.log(`Looking for user with Asana ID: ${ev.user.gid}`);
@@ -119,6 +120,7 @@ app.post("/webhook", async (req, res) => {
           userAccessToken = userResult.rows[0].access_token;
           userRefreshToken = userResult.rows[0].refresh_token;
           userId = userResult.rows[0].id;
+          tokenSource = 'specific_user';
           console.log(`Using specific user's access token`);
         } else {
           console.log('User not found, trying to use any available user token');
@@ -128,12 +130,19 @@ app.post("/webhook", async (req, res) => {
             userAccessToken = anyUserResult.rows[0].access_token;
             userRefreshToken = anyUserResult.rows[0].refresh_token;
             userId = anyUserResult.rows[0].id;
+            tokenSource = 'any_user';
             console.log('Using any available user token');
           } else {
             console.log('No user tokens available, will use PAT');
+            tokenSource = 'PAT';
           }
         }
+      } else {
+        console.log('No user ID in event, will use PAT');
+        tokenSource = 'PAT';
       }
+      
+      console.log(`Token source: ${tokenSource}, PAT available: ${!!process.env.ASANA_PAT}`);
 
       const actor_name = await getUserName(ev.user?.gid, userAccessToken, userRefreshToken, userId);
       const task_id =
@@ -384,6 +393,28 @@ app.get('/test-pat', async (req, res) => {
       pat_available: !!process.env.ASANA_PAT,
       test_user_name: actor_name,
       test_task_name: task_name
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Test PAT directly
+app.get('/test-pat-direct', async (req, res) => {
+  try {
+    if (!process.env.ASANA_PAT) {
+      return res.status(400).json({ error: 'ASANA_PAT not set' });
+    }
+    
+    const response = await fetch('https://app.asana.com/api/1.0/users/me', {
+      headers: { Authorization: `Bearer ${process.env.ASANA_PAT}` }
+    });
+    
+    const data = await response.json();
+    res.json({
+      status: response.status,
+      pat_works: response.status === 200,
+      user_data: data
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
