@@ -421,6 +421,31 @@ app.get('/test-pat-direct', async (req, res) => {
   }
 });
 
+// Test specific user and task from your webhook
+app.get('/test-webhook-data', async (req, res) => {
+  try {
+    const { getUserName, getTaskName } = require('./helpers/asana');
+    
+    const userId = '1211318472551855'; // Your user ID from webhook
+    const taskId = '1211506652673325'; // Task ID from webhook
+    
+    console.log('Testing user fetch...');
+    const userName = await getUserName(userId);
+    console.log('Testing task fetch...');
+    const taskName = await getTaskName(taskId);
+    
+    res.json({
+      user_id: userId,
+      user_name: userName,
+      task_id: taskId,
+      task_name: taskName,
+      pat_available: !!process.env.ASANA_PAT
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
   console.log(`ASANA_PAT available: ${process.env.ASANA_PAT ? 'YES' : 'NO'}`);
